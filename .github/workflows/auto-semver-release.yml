@@ -6,6 +6,12 @@ name: Automatic Semver Release
 # Electron installers are built and attached in this same workflow, because
 # pushes made with GITHUB_TOKEN do not trigger other workflows (so a
 # separate tag-triggered workflow would never fire).
+#
+# Concurrency design: ONLY the linux runner evaluates the next version,
+# pushes the tag, and creates the release. The other runners then derive
+# the version from the tag that linux pushed (git describe), avoiding the
+# race where concurrent matrix jobs computed different versions from the
+# same starting tag state.
 on:
   push:
     branches: ['main', 'dev']
@@ -45,7 +51,8 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Evaluate next semver
+      - name: Evaluate next semver (linux only)
+        if: matrix.platform == 'linux'
         id: semver
         run: |
           set +e
@@ -63,9 +70,13 @@ jobs:
           fi
         shell: bash
 
-      - name: Create tag and release (once, from linux runner)
-        if: matrix.platform == 'linux' && steps.semver.outputs.exists == 'false'
+      - name: Create tag and release (linux only)
+        if: matrix.platform == 'linux'
         run: |
+          if [ "${{ steps.semver.outputs.exists }}" = "true" ]; then
+            echo "Tag already exists (idempotent re-run); skipping creation"
+            exit 0
+          fi
           VERSION="${{ steps.semver.outputs.version }}"
           TAG="v${VERSION}"
           git config user.name "github-actions[bot]"
@@ -84,20 +95,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
 
-      - name: Wait for release to exist (non-linux runners)
+      - name: Resolve released version (non-linux runners)
         if: matrix.platform != 'linux'
+        id: released
         run: |
-          TAG="v${{ steps.semver.outputs.version }}"
-          for i in $(seq 1 30); do
-            if gh release view "$TAG" > /dev/null 2>&1; then
+          # Wait for the linux runner to push the new tag, then derive the
+          # version from the tag closest to this commit (never evaluate
+          # semver independently - that raced in concurrent matrix jobs).
+          for i in $(seq 1 60); do
+            git fetch origin --tags --prune --force > /dev/null 2>&1
+            TAG=$(git describe --tags --abbrev=0 2> /dev/null || true)
+            if [ -n "$TAG" ]; then
+              echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 10
           done
-          echo "Release $TAG did not appear in time"
+          echo "No release tag appeared in time"
           exit 1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
 
       - name: Package Electron app
@@ -105,7 +120,13 @@ jobs:
 
       - name: Upload installers to the release
         run: |
-          TAG="v${{ steps.semver.outputs.version }}"
+          if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ steps.semver.outputs.exists }}" = "true" ]; then
+            TAG="v${{ steps.semver.outputs.version }}"
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            TAG="v${{ steps.semver.outputs.version }}"
+          else
+            TAG="v${{ steps.released.outputs.version }}"
+          fi
           shopt -s nullglob
           files=(release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb release/*.rpm)
           if [ ${#files[@]} -eq 0 ]; then
