@@ -1,0 +1,64 @@
+name: Automatic Semver Release
+
+# Runs after successful Pages deploys:
+#   - dev branch  -> prerelease tag (v<X.Y.Z+1>-dev.N) attached to the dev head,
+#                    published as a GitHub prerelease
+#   - main branch -> stable tag (v<X.Y.Z+1>) attached to the main head,
+#                    published as a GitHub release
+on:
+  push:
+    branches: ['main', 'dev']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history + tags for semver evaluation)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Evaluate next semver
+        id: semver
+        run: |
+          set +e
+          VERSION=$(node scripts/next-semver.js)
+          CODE=$?
+          set -e
+          if [ "$CODE" = "3" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          elif [ "$CODE" != "0" ]; then
+            exit $CODE
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag and release
+        if: steps.semver.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.semver.outputs.version }}"
+          TAG="v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Automatic release $TAG"
+          git push origin "$TAG"
+          PRERELEASE=false
+          if [[ "$VERSION" == *"-dev."* ]]; then
+            PRERELEASE=true
+          fi
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "Automatic release from branch: ${GITHUB_REF_NAME}." \
+            --prerelease="$PRERELEASE"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
