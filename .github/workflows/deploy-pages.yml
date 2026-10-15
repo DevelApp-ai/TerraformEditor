@@ -53,7 +53,7 @@ jobs:
         run: npm audit --audit-level=high
 
       - name: Build main channel (root slot)
-        run: npm run build:web --env PUBLIC_PATH=/TerraformEditor/
+        run: npm run build:web -- --env PUBLIC_PATH=/TerraformEditor/
 
       - name: Stage main slot
         run: |
@@ -70,7 +70,7 @@ jobs:
         run: |
           git checkout origin/dev -- src tests styles.css index.html web/index.html package.json package-lock.json tsconfig.json tsconfig.test.json webpack.web.config.js webpack.config.js eslint.config.js
           npm ci
-          npm run build:web --env PUBLIC_PATH=/TerraformEditor/dev/
+          npm run build:web -- --env PUBLIC_PATH=/TerraformEditor/dev/
           cp styles.css web/styles.css
           mkdir -p _site/dev
           cp -r web/index.html web/renderer.js web/styles.css web/media _site/dev/ 2>/dev/null || true
