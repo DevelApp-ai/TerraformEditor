@@ -9,9 +9,11 @@ name: Automatic Semver Release
 #
 # Concurrency design: ONLY the linux runner evaluates the next version,
 # pushes the tag, and creates the release. The other runners then derive
-# the version from the tag that linux pushed (git describe), avoiding the
-# race where concurrent matrix jobs computed different versions from the
-# same starting tag state.
+# the version from the tag that linux pushed, avoiding the race where
+# concurrent matrix jobs computed different versions from the same
+# starting tag state. The tag is selected per channel (stable vs -dev) so
+# a dev-branch prerelease tag reachable from main history is never picked
+# on main.
 on:
   push:
     branches: ['main', 'dev']
@@ -99,19 +101,33 @@ jobs:
         if: matrix.platform != 'linux'
         id: released
         run: |
-          # Wait for the linux runner to push the new tag, then derive the
-          # version from the tag closest to this commit (never evaluate
-          # semver independently - that raced in concurrent matrix jobs).
+          # Wait for the linux runner to push the new tag, then pick the
+          # tag matching this channel (stable on main, -dev on dev).
+          # Channel scoping is essential: dev prerelease tags are reachable
+          # from main history after dev->main merges, so a plain
+          # 'git describe' can return a -dev tag on main.
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          else
+            REGEX='^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$'
+          fi
           for i in $(seq 1 60); do
             git fetch origin --tags --prune --force > /dev/null 2>&1
-            TAG=$(git describe --tags --abbrev=0 2> /dev/null || true)
+            TAG=$(git for-each-ref --format='%(refname:short)' --sort=-v:refname 'refs/tags/v*' \
+              | grep -E "$REGEX" \
+              | while read -r t; do
+                  if git merge-base --is-ancestor "$t" HEAD 2>/dev/null; then
+                    echo "$t"
+                    break
+                  fi
+                done)
             if [ -n "$TAG" ]; then
               echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 10
           done
-          echo "No release tag appeared in time"
+          echo "No $PATTERN tag reachable from HEAD appeared in time"
           exit 1
         shell: bash
 
@@ -120,9 +136,7 @@ jobs:
 
       - name: Upload installers to the release
         run: |
-          if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ steps.semver.outputs.exists }}" = "true" ]; then
-            TAG="v${{ steps.semver.outputs.version }}"
-          elif [ "${{ matrix.platform }}" = "linux" ]; then
+          if [ "${{ matrix.platform }}" = "linux" ]; then
             TAG="v${{ steps.semver.outputs.version }}"
           else
             TAG="v${{ steps.released.outputs.version }}"
