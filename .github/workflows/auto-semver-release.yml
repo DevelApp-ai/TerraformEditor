@@ -3,17 +3,12 @@ name: Automatic Semver Release
 # On push to main/dev:
 #   - dev  -> next patch prerelease tag (vX.Y.Z+1-dev.N), GitHub prerelease
 #   - main -> next stable tag (vX.Y.Z+1), GitHub release
-# Electron installers are built and attached in this same workflow, because
-# pushes made with GITHUB_TOKEN do not trigger other workflows (so a
-# separate tag-triggered workflow would never fire).
 #
-# Concurrency design: ONLY the linux runner evaluates the next version,
-# pushes the tag, and creates the release. The other runners then derive
-# the version from the tag that linux pushed, avoiding the race where
-# concurrent matrix jobs computed different versions from the same
-# starting tag state. The tag is selected per channel (stable vs -dev) so
-# a dev-branch prerelease tag reachable from main history is never picked
-# on main.
+# Two-stage design: a single linux job evaluates the version, pushes the
+# tag, and creates the release, then hands the exact version to the
+# upload job via job outputs. Upload runners never evaluate or poll for
+# tags - concurrent/polling approaches raced and uploaded installers to
+# the wrong release.
 on:
   push:
     branches: ['main', 'dev']
@@ -22,19 +17,10 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: windows-latest
-            platform: win
-          - os: macos-latest
-            platform: mac
-    runs-on: ${{ matrix.os }}
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semver.outputs.version }}
     steps:
       - name: Checkout (full history + tags for semver evaluation)
         uses: actions/checkout@v4
@@ -47,14 +33,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build application
-        run: npm run build
-
-      - name: Evaluate next semver (linux only)
-        if: matrix.platform == 'linux'
+      - name: Evaluate next semver
         id: semver
         run: |
           set +e
@@ -70,10 +49,8 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
           fi
-        shell: bash
 
-      - name: Create tag and release (linux only)
-        if: matrix.platform == 'linux'
+      - name: Create tag and release
         run: |
           if [ "${{ steps.semver.outputs.exists }}" = "true" ]; then
             echo "Tag already exists (idempotent re-run); skipping creation"
@@ -95,52 +72,43 @@ jobs:
             --prerelease="$PRERELEASE"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
 
-      - name: Resolve released version (non-linux runners)
-        if: matrix.platform != 'linux'
-        id: released
-        run: |
-          # Wait for the linux runner to push the new tag, then pick the
-          # tag matching this channel (stable on main, -dev on dev).
-          # Channel scoping is essential: dev prerelease tags are reachable
-          # from main history after dev->main merges, so a plain
-          # 'git describe' can return a -dev tag on main.
-          if [ "$GITHUB_REF_NAME" = "main" ]; then
-            REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
-          else
-            REGEX='^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$'
-          fi
-          for i in $(seq 1 60); do
-            git fetch origin --tags --prune --force > /dev/null 2>&1
-            TAG=$(git for-each-ref --format='%(refname:short)' --sort=-v:refname 'refs/tags/v*' \
-              | grep -E "$REGEX" \
-              | while read -r t; do
-                  if git merge-base --is-ancestor "$t" HEAD 2>/dev/null; then
-                    echo "$t"
-                    break
-                  fi
-                done)
-            if [ -n "$TAG" ]; then
-              echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "No $PATTERN tag reachable from HEAD appeared in time"
-          exit 1
-        shell: bash
+  upload-assets:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
 
       - name: Package Electron app
         run: npx electron-builder build --${{ matrix.platform }} --publish never
 
       - name: Upload installers to the release
         run: |
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            TAG="v${{ steps.semver.outputs.version }}"
-          else
-            TAG="v${{ steps.released.outputs.version }}"
-          fi
+          TAG="v${{ needs.create-release.outputs.version }}"
           shopt -s nullglob
           files=(release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb release/*.rpm)
           if [ ${#files[@]} -eq 0 ]; then
