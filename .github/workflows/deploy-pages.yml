@@ -1,12 +1,17 @@
 name: Deploy Web App to GitHub Pages
 
+# Deploys both Pages slots from the repository state:
+#   - /            <- main branch build
+#   - /dev/        <- dev branch build (dev channel)
+# Both slots are rebuilt on every run of this workflow so the published
+# site is always deterministic regardless of which branch triggered it.
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'dev']
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -18,8 +23,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (full history + tags for semver evaluation)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,21 +46,56 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      - name: Unit tests (browser services, warnings are errors)
+      - name: Unit tests (warnings are errors)
         run: npm run test:web
 
       - name: Security audit (fail on high/critical)
         run: npm audit --audit-level=high
 
-      - name: Build web bundle (production, fail on warnings)
-        run: npm run build:web
+      - name: Build main channel (root slot)
+        run: npm run build:web --env PUBLIC_PATH=/TerraformEditor/
 
-      - name: Stage static site
+      - name: Stage main slot
         run: |
-          cp styles.css web/styles.css
           mkdir -p _site
-          cp -r web/* _site/
-          touch _site/.nojekyll
+          cp styles.css web/styles.css
+          cp -r web/index.html web/renderer.js* web/styles.css web/media _site/ 2>/dev/null || true
+          cp -r web/index.html web/renderer.js web/styles.css _site/
+          rm -rf web/renderer.js web/renderer.js.map web/renderer.js.LICENSE.txt web/styles.css web/media
+
+      - name: Fetch dev branch
+        run: git fetch origin dev --depth=1
+
+      - name: Build dev channel (/dev/ slot)
+        run: |
+          git checkout origin/dev -- src tests styles.css index.html web/index.html package.json package-lock.json tsconfig.json tsconfig.test.json webpack.web.config.js webpack.config.js eslint.config.js
+          npm ci
+          npm run build:web --env PUBLIC_PATH=/TerraformEditor/dev/
+          cp styles.css web/styles.css
+          mkdir -p _site/dev
+          cp -r web/index.html web/renderer.js web/styles.css web/media _site/dev/ 2>/dev/null || true
+          cp -r web/index.html web/renderer.js web/styles.css _site/dev/
+          rm -rf web/renderer.js web/renderer.js.map web/renderer.js.LICENSE.txt web/styles.css web/media
+
+      - name: Evaluate next semver
+        id: semver
+        run: |
+          set +e
+          VERSION=$(node scripts/next-semver.js)
+          CODE=$?
+          set -e
+          if [ "$CODE" = "3" ]; then
+            echo "Tag already exists (idempotent re-run); keeping existing version"
+          elif [ "$CODE" != "0" ]; then
+            exit $CODE
+          fi
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp site with channel versions
+        run: |
+          MAIN_VERSION=$(git tag --list "v*" --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 | sed 's/^v//') || MAIN_VERSION=0.0.0
+          echo "main: ${MAIN_VERSION}" > _site/VERSION.txt
+          echo "dev: ${{ steps.semver.outputs.version }}" >> _site/VERSION.txt
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
