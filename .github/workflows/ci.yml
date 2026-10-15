@@ -266,31 +266,31 @@ jobs:
         
         # Create a realistic Terraform module
         cat > storage.tf <<'TFEOF'
-variable "storage_account_name" {
-  type = string
-}
+        variable "storage_account_name" {
+          type = string
+        }
 
-variable "location" {
-  type    = string
-  default = "westeurope"
-}
+        variable "location" {
+          type    = string
+          default = "westeurope"
+        }
 
-variable "sku" {
-  type    = string
-  default = "LRS"
-}
+        variable "sku" {
+          type    = string
+          default = "LRS"
+        }
 
-resource "azurerm_storage_account" "storage" {
-  name                     = var.storage_account_name
-  location                 = var.location
-  account_tier             = "Standard"
-  account_replication_type = var.sku
-}
+        resource "azurerm_storage_account" "storage" {
+          name                     = var.storage_account_name
+          location                 = var.location
+          account_tier             = "Standard"
+          account_replication_type = var.sku
+        }
 
-output "storage_account_id" {
-  value = azurerm_storage_account.storage.id
-}
-TFEOF
+        output "storage_account_id" {
+          value = azurerm_storage_account.storage.id
+        }
+        TFEOF
         
         git add .
         git commit -m "Add storage account module"
