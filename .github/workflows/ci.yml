@@ -183,8 +183,8 @@ jobs:
     - name: Build application
       run: npm run build
     
-    - name: Package application
-      run: npm run package:${{ matrix.platform }}
+    - name: Package application (no publish; releases are published by release-electron.yml on tags)
+      run: npx electron-builder build --${{ matrix.platform }} --publish never
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4

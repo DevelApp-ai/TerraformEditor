@@ -44,8 +44,10 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Package Electron app
-        run: npm run package:${{ matrix.platform }}
+      - name: Package and publish to GitHub Releases
+        run: npx electron-builder build --${{ matrix.platform }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
