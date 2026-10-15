@@ -1,0 +1,305 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        # Fetch full history for better analysis
+        fetch-depth: 0
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check line endings (CRLF/LF consistency)
+      run: |
+        echo "Checking for CRLF line endings in source files..."
+        if find src -name "*.ts" -o -name "*.js" -o -name "*.json" | xargs file | grep -q CRLF; then
+          echo "❌ Found CRLF line endings in source files. Please use LF line endings."
+          find src -name "*.ts" -o -name "*.js" -o -name "*.json" | xargs file | grep CRLF
+          exit 1
+        else
+          echo "✅ All source files use LF line endings"
+        fi
+    
+    - name: Check code formatting
+      run: npm run format:check
+    
+    - name: TypeScript type checking
+      run: npm run type-check
+    
+    - name: ESLint check
+      run: npm run lint
+    
+    - name: Security audit (fail on high/critical)
+      run: npm run audit
+
+  test:
+    name: Cross-Platform Testing
+    needs: code-quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: ['22']
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest  
+            platform: win
+          - os: macos-latest
+            platform: mac
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Configure git (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        git config --global core.autocrlf false
+        git config --global core.eol lf
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Setup virtual display (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libgtk-3-0 libxss1 libasound2-dev
+    
+    - name: Build application
+      run: npm run build
+    
+    - name: Verify cross-platform paths
+      shell: bash
+      run: |
+        echo "Checking build output consistency across platforms..."
+        if [ ! -d "dist" ]; then
+          echo "❌ Build directory 'dist' not found"
+          exit 1
+        fi
+        if [ ! -f "dist/main.js" ]; then
+          echo "❌ Main bundle not found"
+          exit 1
+        fi
+        echo "✅ Build output structure is consistent"
+    
+    - name: Run tests
+      run: |
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 3
+        fi
+        npm test
+      shell: bash
+      env:
+        CI: true
+    
+    - name: Test git repository integration
+      shell: bash
+      run: |
+        echo "Testing git repository module analysis..."
+        # Test that the application structure supports git integration
+        if [ -f "src/main/git-module-analyzer.ts" ]; then
+          echo "✅ GitModuleAnalyzer source file exists"
+        else
+          echo "❌ GitModuleAnalyzer source file not found"
+          exit 1
+        fi
+        
+        if [ -f "dist/main.js" ]; then
+          echo "✅ Main bundle exists"
+        else
+          echo "❌ Main bundle not found"
+          exit 1
+        fi
+        
+        echo "✅ Git repository integration structure validated"
+
+  build-and-package:
+    name: Build & Package
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact-name: terraform-editor-linux
+          - os: windows-latest
+            platform: win  
+            artifact-name: terraform-editor-windows
+          - os: macos-latest
+            platform: mac
+            artifact-name: terraform-editor-macos
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build application
+      run: npm run build
+    
+    - name: Package application
+      run: npm run package:${{ matrix.platform }}
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact-name }}
+        path: release/
+        retention-days: 30
+        compression-level: 6
+    
+    - name: Verify package integrity
+      shell: bash
+      run: |
+        echo "Verifying package contents for ${{ matrix.platform }}..."
+        if [ ! -d "release" ]; then
+          echo "❌ Release directory not found"
+          exit 1
+        fi
+        ls -la release/
+        echo "✅ Package created successfully"
+
+  dependency-analysis:
+    name: Dependency Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check for dependency vulnerabilities
+      run: npm audit --audit-level=high
+      continue-on-error: true
+    
+    - name: Check package size
+      run: |
+        echo "Analyzing package size impact..."
+        du -sh node_modules/ || echo "Node modules size check failed"
+        npm list --depth=0 --prod || echo "Production dependency listing failed"
+
+  git-integration-test:
+    name: Git Repository Integration Test
+    runs-on: ubuntu-latest
+    needs: code-quality
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build application
+      run: npm run build
+    
+    - name: Test git repository toolbox functionality
+      run: |
+        echo "Testing git repository integration..."
+        # Create a test git repository with proper structure
+        mkdir -p /tmp/test-terraform-repo
+        cd /tmp/test-terraform-repo
+        git init
+        git config --local user.email "test@ci.com"
+        git config --local user.name "CI Test"
+        
+        # Create a realistic Terraform module
+        cat > storage.tf <<'TFEOF'
+        variable "storage_account_name" {
+          type = string
+        }
+
+        variable "location" {
+          type    = string
+          default = "westeurope"
+        }
+
+        variable "sku" {
+          type    = string
+          default = "LRS"
+        }
+
+        resource "azurerm_storage_account" "storage" {
+          name                     = var.storage_account_name
+          location                 = var.location
+          account_tier             = "Standard"
+          account_replication_type = var.sku
+        }
+
+        output "storage_account_id" {
+          value = azurerm_storage_account.storage.id
+        }
+        TFEOF
+        
+        git add .
+        git commit -m "Add storage account module"
+        
+        # Test that the GitModuleAnalyzer can parse this module
+        cd /home/runner/work/TerraformEditor/TerraformEditor
+        node scripts/ci-module-parse-test.js
+        
+        # Validate the module structure
+        echo "📁 Repository structure:"
+        find /tmp/test-terraform-repo -name "*.tf" -exec echo "  {}" \;
+        echo "✅ Git repository toolbox integration test completed"

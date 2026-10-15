@@ -1,0 +1,229 @@
+:root {
+  --primary-color: #0078d4;
+  --secondary-color: #2b88d8;
+  --background-color: #f5f5f5;
+  --panel-background: #ffffff;
+  --border-color: #e0e0e0;
+  --text-color: #333333;
+  --text-light: #666666;
+  --success-color: #107c10;
+  --warning-color: #ff8c00;
+  --error-color: #d13438;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Toolbar styles */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 10px 20px;
+  height: 50px;
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.toolbar-actions button, .toolbar-actions select {
+  padding: 5px 10px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.toolbar-actions button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Main content styles */
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.module-toolbox {
+  width: 250px;
+  background-color: var(--panel-background);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.blockly-workspace {
+  flex: 1;
+  background-color: var(--panel-background);
+  position: relative;
+}
+
+.properties-panel {
+  width: 300px;
+  background-color: var(--panel-background);
+  border-left: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: 10px;
+}
+
+/* Bottom panel styles */
+.bottom-panel {
+  height: 200px;
+  background-color: var(--panel-background);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-tabs {
+  display: flex;
+  background-color: var(--background-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tab-button {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-light);
+}
+
+.tab-button.active {
+  background-color: var(--panel-background);
+  color: var(--primary-color);
+  border-bottom: 2px solid var(--primary-color);
+}
+
+.panel-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.tab-content {
+  display: none;
+  height: 100%;
+  overflow: auto;
+  padding: 10px;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+#generatedCode {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  white-space: pre-wrap;
+  height: 100%;
+  overflow: auto;
+}
+
+#consoleOutput {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  white-space: pre-wrap;
+  height: 100%;
+  overflow: auto;
+}
+
+/* Module toolbox styles */
+.module-category {
+  margin-bottom: 10px;
+}
+
+.category-header {
+  font-weight: bold;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--background-color);
+  border-radius: 4px;
+}
+
+.category-items {
+  padding-left: 10px;
+}
+
+.module-item {
+  padding: 5px;
+  margin: 5px 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.module-item:hover {
+  background-color: var(--background-color);
+}
+
+/* Properties panel styles */
+.property-group {
+  margin-bottom: 15px;
+}
+
+.property-group-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.property-item {
+  margin-bottom: 8px;
+}
+
+.property-label {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+.property-value input, .property-value select {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .properties-panel {
+    width: 250px;
+  }
+}
+
+@media (max-width: 900px) {
+  .module-toolbox {
+    width: 200px;
+  }
+}

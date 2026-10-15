@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.github.com;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terraform Blockly Editor</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="toolbar">
+      <div class="logo">Terraform Blockly Editor</div>
+      <div class="toolbar-actions">
+        <button id="newFile">New</button>
+        <button id="openFile">Open</button>
+        <button id="saveFile">Save</button>
+        <select id="environmentSelector">
+          <option value="development">Development</option>
+          <option value="testing">Testing</option>
+          <option value="staging">Staging</option>
+          <option value="production">Production</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="module-toolbox" id="moduleToolbox">
+        <!-- Module toolbox will be populated dynamically -->
+      </div>
+
+      <div class="blockly-workspace" id="blocklyDiv">
+        <!-- Blockly workspace will be injected here -->
+      </div>
+
+      <div class="properties-panel" id="propertiesPanel">
+        <!-- Properties panel will be populated dynamically -->
+      </div>
+    </div>
+
+    <div class="bottom-panel">
+      <div class="panel-tabs">
+        <button class="tab-button active" data-tab="codePreview">Code Preview</button>
+        <button class="tab-button" data-tab="console">Console</button>
+      </div>
+      <div class="panel-content">
+        <div class="tab-content active" id="codePreview">
+          <pre id="generatedCode"></pre>
+        </div>
+        <div class="tab-content" id="console">
+          <div id="consoleOutput"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
