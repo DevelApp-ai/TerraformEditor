@@ -1,10 +1,11 @@
 name: Automatic Semver Release
 
-# Runs after successful Pages deploys:
-#   - dev branch  -> prerelease tag (v<X.Y.Z+1>-dev.N) attached to the dev head,
-#                    published as a GitHub prerelease
-#   - main branch -> stable tag (v<X.Y.Z+1>) attached to the main head,
-#                    published as a GitHub release
+# On push to main/dev:
+#   - dev  -> next patch prerelease tag (vX.Y.Z+1-dev.N), GitHub prerelease
+#   - main -> next stable tag (vX.Y.Z+1), GitHub release
+# Electron installers are built and attached in this same workflow, because
+# pushes made with GITHUB_TOKEN do not trigger other workflows (so a
+# separate tag-triggered workflow would never fire).
 on:
   push:
     branches: ['main', 'dev']
@@ -14,7 +15,18 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout (full history + tags for semver evaluation)
         uses: actions/checkout@v4
@@ -25,6 +37,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
 
       - name: Evaluate next semver
         id: semver
@@ -42,9 +61,10 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
           fi
+        shell: bash
 
-      - name: Create tag and release
-        if: steps.semver.outputs.exists == 'false'
+      - name: Create tag and release (once, from linux runner)
+        if: matrix.platform == 'linux' && steps.semver.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.semver.outputs.version }}"
           TAG="v${VERSION}"
@@ -62,3 +82,37 @@ jobs:
             --prerelease="$PRERELEASE"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+
+      - name: Wait for release to exist (non-linux runners)
+        if: matrix.platform != 'linux'
+        run: |
+          TAG="v${{ steps.semver.outputs.version }}"
+          for i in $(seq 1 30); do
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Release $TAG did not appear in time"
+          exit 1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+
+      - name: Package Electron app
+        run: npx electron-builder build --${{ matrix.platform }} --publish never
+
+      - name: Upload installers to the release
+        run: |
+          TAG="v${{ steps.semver.outputs.version }}"
+          shopt -s nullglob
+          files=(release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb release/*.rpm)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No installers found for ${{ matrix.platform }}"
+            exit 1
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
