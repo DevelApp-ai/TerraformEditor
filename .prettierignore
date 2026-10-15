@@ -1,0 +1,13 @@
+dist/
+node_modules/
+release/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.tmp
+*.temp
+coverage/
+.nyc_output/
+.eslintcache

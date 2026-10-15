@@ -1,0 +1,130 @@
+{
+  "name": "terraform-blockly-editor",
+  "version": "1.0.0",
+  "description": "Visual editor for Terraform/OpenTofu with module support using Google Blockly",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "webpack --config webpack.config.js",
+    "watch": "webpack --config webpack.config.js --watch",
+    "dev": "npm run build && npm run start",
+    "test": "node tests/run-all-tests.js",
+    "test:web": "tsc -p tsconfig.test.json && node --test tests/unit/*.test.mjs",
+    "test:core": "electron tests/core-functionality.test.js",
+    "test:modules": "electron tests/module-analysis.test.js",
+    "test:flags": "electron tests/feature-flags.test.js",
+    "test:platform": "electron tests/cross-platform.test.js",
+    "package": "electron-builder build --mac --win --linux",
+    "package:win": "electron-builder build --win",
+    "package:mac": "electron-builder build --mac",
+    "package:linux": "electron-builder build --linux",
+    "prepare-package": "node scripts/prepare-package.js",
+    "postinstall": "electron-builder install-app-deps",
+    "lint": "tsc --noEmit && eslint src/**/*.ts --max-warnings 0",
+    "build:web": "webpack --config webpack.web.config.js",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\"",
+    "clean": "rm -rf dist",
+    "audit": "npm audit --audit-level=high",
+    "type-check": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "keywords": [
+    "terraform",
+    "opentofu",
+    "hcl",
+    "blockly",
+    "infrastructure-as-code",
+    "visual-programming"
+  ],
+  "author": {
+    "name": "DevelApp-ai",
+    "email": "develapp@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "blockly": "^10.0.0",
+    "simple-git": "^4.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.20.5",
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
+    "@typescript-eslint/parser": "^8.71.2",
+    "css-loader": "^6.7.3",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9.39.5",
+    "fake-indexeddb": "^6.2.5",
+    "playright": "^0.0.22",
+    "playwright": "^1.64.1",
+    "prettier": "^3.0.0",
+    "style-loader": "^3.3.1",
+    "ts-loader": "^9.4.2",
+    "typescript": "^5.9.3",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1"
+  },
+  "build": {
+    "appId": "com.terraform.blockly.editor",
+    "productName": "Terraform Blockly Editor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "index.html",
+      "styles.css"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icons/mac/icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icons/win/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "category": "Development",
+      "icon": "assets/icons/png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
