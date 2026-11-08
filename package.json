@@ -38,10 +38,7 @@
     "infrastructure-as-code",
     "visual-programming"
   ],
-  "author": {
-    "name": "DevelApp-ai",
-    "email": "develapp@users.noreply.github.com"
-  },
+  "author": "DevelApp.ai ApS",
   "license": "MIT",
   "dependencies": {
     "blockly": "^10.0.0",

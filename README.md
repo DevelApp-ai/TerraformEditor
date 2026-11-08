@@ -86,3 +86,7 @@ All quality gates treat warnings as errors: strict TypeScript, ESLint `--max-war
 ## Documentation
 
 - [Security Posture](docs/security.md): Threat model, CSP, token handling
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 DevelApp.ai ApS.
