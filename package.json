@@ -74,7 +74,8 @@
       "node_modules/**/*",
       "package.json",
       "index.html",
-      "styles.css"
+      "styles.css",
+      "LICENSE"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
